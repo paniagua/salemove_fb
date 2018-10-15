@@ -12,6 +12,6 @@ SERVER=
 TOKEN=
 INCOMING_URL=
 SITE_ID=
+APPLICATION_TOKEN=
 
 # note: .env is a shell file so there can't be spaces around '=
-

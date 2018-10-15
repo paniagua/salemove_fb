@@ -8,6 +8,7 @@ function config () {
   return {
     server: process.env.SERVER,
     token: process.env.TOKEN,
+    applicationToken: process.env.APPLICATION_TOKEN,
     incomingUrl: process.env.INCOMING_URL,
     siteId: process.env.SITE_ID
   }
@@ -27,6 +28,14 @@ function getEngagementBySenderId(senderId){
 
 function engagementStart(senderId, operatorId, id, metadata, headers){
   engagement.addEngagement(senderId, operatorId, id, metadata, headers);
+}
+
+function visitorAuthentication(visitor) {
+  return {
+    'Accept': 'application/vnd.salemove.v1+json',
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${visitor.access_token}`
+  };
 }
 
 function pickOperator(callback) {
@@ -69,34 +78,49 @@ function sendMessage(engagement, message, callback){
 }
 
 function startEngagementRequest(senderId, callback){
-  pickOperator(function(operator){
-    requestEngagement(operator, function(success, engagementRequest){
-      if (success) {
-        engagement_request.addEngagementRequest(engagementRequest.id, senderId, operator.id, engagementRequest.visitor_authentication);
-        callback(operator);
-      }
-      else {
-        callback({});
-      }
+  createVisitor(function(visitor) {
+    pickOperator(function(operator){
+      requestEngagement(visitor, operator, function(success, engagementRequest) {
+        if (success) {
+          engagement_request.addEngagementRequest(engagementRequest.id, senderId, operator.id, visitorAuthentication(visitor));
+          callback(operator);
+        }
+        else {
+          callback({});
+        }
+      });
     });
   });
 }
 
-function requestEngagement(operator, callback) {
+function createVisitor(callback) {
   var options = {
-    uri: `https://${config().server}/engagement_requests`,
+    uri: `https://${config().server}/visitors`,
     headers: {
-      'Authorization': `Token ${config().token}`,
+      'Authorization': `ApplicationToken ${config().applicationToken}`,
       'Accept': 'application/vnd.salemove.v1+json'
     },
+    method: 'POST'
+  };
+  request(options, function (error, response, body) {
+    if (!error && response.statusCode == 200) {
+      callback(JSON.parse(body));
+    } else {
+      callback({});
+    }
+  });
+}
+
+function requestEngagement(visitor, operator, callback) {
+  var options = {
+    uri: `https://${config().server}/engagement_requests`,
+    headers: visitorAuthentication(visitor),
     method: 'POST',
     json: {
       media: 'text',
       operator_id: operator.id,
-      new_site_visitor: {
-        site_id: config().siteId,
-        name: 'Demo Visitor'
-      },
+      source: 'visitor_integrator',
+      site_id: config().siteId,
       webhooks: [{
         url: config().incomingUrl,
         method: 'POST',
